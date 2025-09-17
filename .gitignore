@@ -1,3 +1,7 @@
 .DS_STORE 
 
 task-tracker.xcodeproj
+
+task-tracker/tasks.json 
+
+task-tracker/json.hpp
