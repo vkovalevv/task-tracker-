@@ -15,10 +15,8 @@
 #include <string>
 #include <fstream>
 #include "json.hpp"
-#include <memory>
-#include <filesystem>
 #include <map>
-
+#include <algorithm>
 using std::string;
 using std::cout;
 using std::cin;
@@ -27,6 +25,13 @@ using std::endl;
 using json = nlohmann::json;
 
 enum class TaskStatus{todo,in_progress,done};
+
+NLOHMANN_JSON_SERIALIZE_ENUM(TaskStatus,{
+    {TaskStatus::todo,"todo"},
+    {TaskStatus::in_progress,"in_progress"},
+    {TaskStatus::done,"done"}
+});
+
 enum class Operations{ADD,DELETE,UPDATE,MARK_IN_PROGRESS, MARKDONE, LIST};
 
 std::map<string,Operations> commandMap = {{"add",Operations::ADD},
@@ -34,11 +39,7 @@ std::map<string,Operations> commandMap = {{"add",Operations::ADD},
     {"mark-in-progress",Operations::MARK_IN_PROGRESS},{"markdone",Operations::MARKDONE},
     {"list",Operations::LIST}};
 
-NLOHMANN_JSON_SERIALIZE_ENUM(TaskStatus,{
-    {TaskStatus::todo,"todo"},
-    {TaskStatus::in_progress,"in_progress"},
-    {TaskStatus::done,"done"}
-});
+
 
 string CurrentTime(){
     time_t timestamp;
@@ -75,47 +76,106 @@ void ParsingJson(std::ifstream& input_file, json& tasks){
         tasks = json::array();
     }
 }
-
+class TaskManager{
+public:
+    TaskManager(){
+        std::ifstream input_file("tasks.json");
+        ParsingJson(input_file, tasks_);
+    }
+    
+    void AddTask(const string& description){
+        json last_elem = tasks_.back();
+        size_t cur_id = static_cast<size_t>(last_elem["id"]) + 1;
+        tasks_.push_back(Task{cur_id,description});
+    }
+    void UpdateTask(size_t id_update,const string& description){
+        tasks_[id_update-1]["description"] = description;
+    }
+    void DeleteTask(size_t id){
+        auto pos = find_if(tasks_.begin(),tasks_.end(),[id](const json& task){ return static_cast<size_t>(task["id"]) == id;});
+        if(pos != tasks_.end()){
+            tasks_.erase(pos);
+        }else{
+            cout << "Incorrect index" << endl;
+        }
+    }
+    void MarkInProgress(size_t id){
+        auto pos = find_if(tasks_.begin(),tasks_.end(),[id](const json& task){ return static_cast<size_t>(task["id"]) == id;});
+        if(pos != tasks_.end()){
+            (*pos)["status"] = TaskStatus::in_progress;
+        }else{
+            cout << "Incorrect index" << endl;
+        }
+    }
+    void MarkDone(size_t id){
+        auto pos = find_if(tasks_.begin(),tasks_.end(),[id](const json& task){ return static_cast<size_t>(task["id"]) == id;});
+        if(pos != tasks_.end()){
+            (*pos)["status"] = TaskStatus::done;
+        }else{
+            cout << "Incorrect index" << endl;
+        }
+    }
+    
+    void List(){
+        for(auto& x: tasks_){
+            cout << x.dump(2);
+        }
+    }
+    template<typename Status>
+    void List(Status status){
+        for(auto& x: tasks_){
+            if(x["status"] == status)
+                cout << x.dump(2);
+        }
+    }
+    
+    ~TaskManager(){
+        std::ofstream output_file("tasks.json");
+        output_file << tasks_.dump(2);
+    }
+private:
+    json tasks_;
+};
 int main(int argc, const char * argv[]) {
     Test1();
     
     if(argc > 1){
         std::string_view operation = argv[1];
         Operations command = commandMap.at(operation.data());
-        
+        TaskManager task_manager;
         switch (command) {
             case Operations::ADD:{
-                std::ifstream input_file("tasks.json");
-                json tasks = json::array();
-                
-                ParsingJson(input_file, tasks);
-                
-                size_t obj_id = tasks.size() + 1; // id current added object
-                
-                input_file.close(); // close the file, so that two threads dont refer to same file
-                
-                
-                tasks.push_back(Task{obj_id,argv[2]});
-                
-                std::ofstream output_file("tasks.json");
-                output_file << tasks.dump(2);
+                task_manager.AddTask(argv[2]);
                 break;
             }
             case Operations::UPDATE:{
-                std::ifstream input_file("tasks.json");
-                json tasks = json::array();
-                
-                ParsingJson(input_file, tasks);
-                
-                input_file.close();
-                std::ofstream output_file("tasks.json");
-                
                 size_t id_update  = std::stoull(argv[2]) - 1;
-                tasks.at(id_update)["description"] = argv[3];
-                
-                output_file << tasks.dump(2);
+                task_manager.UpdateTask(id_update, argv[3]);
                 break;
                 
+            }
+            case Operations::DELETE:{
+                size_t id_delete  = std::stoull(argv[2]);
+                task_manager.DeleteTask(id_delete);
+                break;
+            }
+            case Operations::MARK_IN_PROGRESS:{
+                size_t id_mark = std::stoull(argv[2]);
+                task_manager.MarkInProgress(id_mark);
+                break;
+            }
+            case Operations::MARKDONE:{
+                size_t id_mark = std::stoull(argv[2]);
+                task_manager.MarkDone(id_mark);
+                break;
+            }
+            case Operations::LIST:{
+                if(argc == 2){
+                    task_manager.List();
+                }else{
+                    task_manager.List(argv[2]);
+                }
+                break;
             }
             default:
                 break;
