@@ -84,12 +84,18 @@ public:
     }
     
     void AddTask(const string& description){
-        json last_elem = tasks_.back();
-        size_t cur_id = static_cast<size_t>(last_elem["id"]) + 1;
+        size_t cur_id;
+        if(!tasks_.empty()){
+            json last_elem = tasks_.back();
+            cur_id = static_cast<size_t>(last_elem["id"]) + 1;
+        }else{
+            cur_id = 1;
+        }
         tasks_.push_back(Task{cur_id,description});
     }
     void UpdateTask(size_t id_update,const string& description){
-        tasks_[id_update-1]["description"] = description;
+        auto pos = find_if(tasks_.begin(),tasks_.end(),[id_update](const json& task){ return static_cast<size_t>(task["id"]) == id_update;});
+        (*pos)["description"] = description;
     }
     void DeleteTask(size_t id){
         auto pos = find_if(tasks_.begin(),tasks_.end(),[id](const json& task){ return static_cast<size_t>(task["id"]) == id;});
@@ -121,8 +127,8 @@ public:
             cout << x.dump(2);
         }
     }
-    template<typename Status>
-    void List(Status status){
+   
+    void List(TaskStatus status){
         for(auto& x: tasks_){
             if(x["status"] == status)
                 cout << x.dump(2);
@@ -137,11 +143,16 @@ private:
     json tasks_;
 };
 int main(int argc, const char * argv[]) {
-    Test1();
     
     if(argc > 1){
         std::string_view operation = argv[1];
-        Operations command = commandMap.at(operation.data());
+        Operations command;
+        try{
+            command = commandMap.at(operation.data());
+        }catch(std::out_of_range& e){
+            cout << "Incorrect key" << endl;
+            throw;
+        }
         TaskManager task_manager;
         switch (command) {
             case Operations::ADD:{
@@ -149,7 +160,7 @@ int main(int argc, const char * argv[]) {
                 break;
             }
             case Operations::UPDATE:{
-                size_t id_update  = std::stoull(argv[2]) - 1;
+                size_t id_update  = std::stoull(argv[2]);
                 task_manager.UpdateTask(id_update, argv[3]);
                 break;
                 
@@ -173,7 +184,8 @@ int main(int argc, const char * argv[]) {
                 if(argc == 2){
                     task_manager.List();
                 }else{
-                    task_manager.List(argv[2]);
+                    json operation = argv[2];
+                    task_manager.List(operation);
                 }
                 break;
             }

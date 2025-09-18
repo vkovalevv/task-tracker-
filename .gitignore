@@ -5,3 +5,4 @@ task-tracker.xcodeproj
 task-tracker/tasks.json 
 
 task-tracker/json.hpp
+task-tracker/task_tracker
